@@ -1,6 +1,6 @@
 [package]
 name = "mvnc"
-version = "0.2.1"
+version = "0.3.0"
 authors = ["Wiebe Cnossen <wiebe.cnossen@gmail.com>"]
 description = "Wrapper around the Movidius Neural Computing stick C API"
 license = "MIT"

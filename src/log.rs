@@ -31,7 +31,7 @@ pub fn get_log_level() -> Result<LogLevel, Error> {
                 0 => Ok(LogLevel::Off),
                 1 => Ok(LogLevel::Error),
                 2 => Ok(LogLevel::Verbose),
-                _ => Err(Error::Unknown),
+                _ => Err(Error::ApiError),
             }
         })
 }

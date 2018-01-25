@@ -18,17 +18,13 @@ pub enum Blocking {
     DontBlock,
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub enum Slot {
-    Zero,
-    One,
-}
-
-const SLOTS: [Slot; 2] = [Slot::Zero, Slot::One];
+const ID_COUNT: usize = 3;
 
 pub struct Graph<'a> {
     handle: *const c_void,
-    slot: usize,
+    next_id: usize,
+    ids: [usize; ID_COUNT],
+    result_id: usize,
     phantom: PhantomData<(&'a Device)>,
 }
 
@@ -46,61 +42,67 @@ impl<'a> Graph<'a> {
         }.into_result()
             .map(|()| Self {
                 handle,
-                slot: 0,
+                next_id: 1,
+                ids: [0; ID_COUNT],
+                result_id: 0,
                 phantom: PhantomData,
             })
     }
 
     /// Loads an input `tensor`. The type `In` is most likely `::half::f16`.
     ///
-    /// Returns the slot in which the tensor was loaded.
-    pub fn load_tensor<In>(&mut self, tensor: &[In]) -> Result<Slot, Error> {
-        let slot = SLOTS[self.slot..self.slot + 1].as_ptr();
+    /// Returns the id of the calculation.
+    pub fn load_tensor<In>(&mut self, tensor: &[In]) -> Result<usize, Error> {
+        let i = self.next_id % self.ids.len();
+        self.ids[i] = self.next_id;
         unsafe {
             api::mvncLoadTensor(
                 self.handle,
                 tensor.as_ptr() as *const _ as *const c_void,
                 (size_of::<In>() * tensor.len()) as c_uint,
-                slot as *const c_void,
+                self.ids[i..].as_ptr() as *const c_void,
             )
         }.into_result()
             .map(|()| {
-                self.slot = if self.slot == 0 { 1 } else { 0 };
-                unsafe { &*slot }.clone()
+                let id = self.next_id;
+                self.next_id += 1;
+                id
             })
     }
 
     /// Gets the next result. The type `Out` is most likely `::half::f16`.
     ///
-    /// Returns the output values and the slot from which the result was taken.
-    pub fn get_result<Out>(&self) -> Result<(Slot, &[Out]), Error>
-    where
-        Out: ::std::fmt::Debug,
-    {
-        let mut p = ptr::null();
+    /// Returns the id of the calculation and its output.
+    ///
+    /// Noteworthy errors:
+    /// * `Idle`: there are no pending calculations
+    /// * `NoData`: pending calculation is not ready,
+    ///    occurs only if `Blocking::DontBlock` is set.
+    /// * `ApiError`: size of result data is not a multiple of the size of `Out`.
+    pub fn get_result<Out>(&mut self) -> Result<(usize, &[Out]), Error> {
+        let mut result_ptr = ptr::null();
         let mut size = 0;
         let mut s = ptr::null();
 
-        unsafe { api::mvncGetResult(self.handle, &mut p, &mut size, &mut s) }
+        if self.result_id + 1 == self.next_id {
+            return Err(Error::Idle);
+        }
+
+        unsafe { api::mvncGetResult(self.handle, &mut result_ptr, &mut size, &mut s) }
             .into_result()
-            .map(|()| {
-                if size % size_of::<Out>() as c_uint != 0 {
-                    panic!(
-                        "Expected multiple of {} bytes for result, got {}",
-                        size_of::<Out>(),
-                        size
-                    );
+            .and_then(|()| {
+                let result_size = size as usize;
+                if result_size % size_of::<Out>() != 0 {
+                    return Err(Error::ApiError);
                 }
 
-                unsafe {
-                    (
-                        (*(s as *const _ as *const Slot)).clone(),
-                        slice::from_raw_parts(
-                            p as *const _ as *const Out,
-                            size as usize / size_of::<Out>(),
-                        ),
+                self.result_id = unsafe { *(s as *const _ as *const usize) };
+                Ok((self.result_id, unsafe {
+                    slice::from_raw_parts(
+                        result_ptr as *const _ as *const Out,
+                        result_size / size_of::<Out>(),
                     )
-                }
+                }))
             })
     }
 
@@ -123,7 +125,7 @@ impl<'a> Graph<'a> {
                 match blocking {
                     0 => Ok(Blocking::Block),
                     1 => Ok(Blocking::DontBlock),
-                    _ => Err(Error::Unknown),
+                    _ => Err(Error::ApiError),
                 }
             })
     }

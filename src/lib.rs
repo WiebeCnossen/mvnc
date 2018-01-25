@@ -24,8 +24,8 @@ fn from_c_string(c_string: &[u8]) -> Result<String, Error> {
     match c_string.iter().position(|&c| c == 0) {
         Some(p) => str::from_utf8(&c_string[0..p])
             .map(|s| s.to_owned())
-            .map_err(|_| Error::Unknown),
-        None => Err(Error::Unknown),
+            .map_err(|_| Error::ApiError),
+        None => Err(Error::ApiError),
     }
 }
 
@@ -42,7 +42,8 @@ pub enum Error {
     Gone,
     UnsupportedGraphFile,
     MyriadError,
-    Unknown,
+    ApiError,
+    Idle,
 }
 
 trait IntoResult {
@@ -64,7 +65,7 @@ impl IntoResult for c_int {
             MVNC_GONE => Err(Error::Gone),
             MVNC_UNSUPPORTED_GRAPH_FILE => Err(Error::UnsupportedGraphFile),
             MVNC_MYRIAD_ERROR => Err(Error::MyriadError),
-            _ => Err(Error::Unknown),
+            _ => Err(Error::ApiError),
         }
     }
 }

@@ -68,7 +68,7 @@ impl Device {
                     api::MVNC_TEMP_LIM_HIGHER => {
                         Ok(ThermalThrottlingLevel::TemperatureLimitHigherReached)
                     }
-                    _ => Err(Error::Unknown),
+                    _ => Err(Error::ApiError),
                 }
             })
     }
