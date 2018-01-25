@@ -1,0 +1,12 @@
+[package]
+name = "mvnc"
+version = "0.2.1"
+authors = ["Wiebe Cnossen <wiebe.cnossen@gmail.com>"]
+description = "Wrapper around the Movidius Neural Computing stick C API"
+license = "MIT"
+repository = "https://github.com/WiebeCnossen/mvnc"
+readme = "readme.md"
+
+[dev-dependencies]
+half = "^1"
+rand = "^0.4"
